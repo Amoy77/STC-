@@ -1,0 +1,115 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta name="viewport" content="initial-scale=1.0, user-scalable=no" />
+    <meta http-equiv="Content-Type" content="text/html; charset=utf-8" />
+    <title>地图搜索与经纬度解析</title>
+    <style type="text/css">
+        html{height:100%}
+        body{height:100%;margin:0px;padding:0px}
+        #container{height:100%}
+        .searchInput {width: 300px;margin-top: 10px;}
+        .button {margin: 5px;}
+    </style>
+    <script type="text/javascript" src="https://api.map.baidu.com/api?v=3.0&amp;ak=IfOCUmJIp0H1nrZhgXoL7TQ3rJrZYuXO"></script>
+</head>
+
+<body>
+    <h1>地图搜索与经纬度解析</h1>
+    <input id="startInput" class="searchInput" type="text" placeholder="请输入起点位置">
+    <input id="endInput" class="searchInput" type="text" placeholder="请输入终点位置">
+    <div id="container"></div>
+    <div id='result'>根据起点和终点经纬度驾车导航路线</div>
+    <p>请输入经度和纬度：</p>
+    <input type="text" id="longitude" placeholder="经度">
+    <input type="text" id="latitude" placeholder="纬度">
+    <button onclick="getLocation()">解析</button>
+    <p id="location"></p>
+
+    <script type="text/javascript">
+        // 展示地图
+        var map = new BMap.Map("container");
+        var point = new BMap.Point(114.51189910433335, 36.58220995988854);
+        map.centerAndZoom(point, 18);
+        map.enableScrollWheelZoom(true);
+
+        var startPoint = null;
+        var endPoint = null;
+
+        // 添加起点搜索功能
+        var startInput = document.getElementById("startInput");
+        var startAutocomplete = new BMap.Autocomplete({input: startInput,location: map});
+        startAutocomplete.addEventListener("onconfirm", function(e) {
+            var value = e.item.value;
+            var myValue = value.province +  value.city +  value.district +  value.street +  value.business;
+            var local = new BMap.LocalSearch(map, {
+                onSearchComplete: function(results){
+                    if (local.getStatus() == BMAP_STATUS_SUCCESS){
+                        startPoint = results.getPoi(0).point;
+                        map.clearOverlays();    //清除地图上所有覆盖物
+                        var marker = new BMap.Marker(startPoint); // 创建标注
+                        map.addOverlay(marker); // 将标注添加到地图中
+                        if (endPoint) {
+                            drawRoute(startPoint, endPoint);
+                        }
+                    }
+                }
+            });
+            local.search(myValue);
+        });
+
+        // 添加终点搜索功能
+        var endInput = document.getElementById("endInput");
+        var endAutocomplete = new BMap.Autocomplete({input: endInput,location: map});
+        endAutocomplete.addEventListener("onconfirm", function(e) {
+            var value = e.item.value;
+            var myValue = value.province +  value.city +  value.district +  value.street +  value.business;
+            var local = new BMap.LocalSearch(map, {
+                onSearchComplete: function(results){
+                    if (local.getStatus() == BMAP_STATUS_SUCCESS){
+                        endPoint = results.getPoi(0).point;
+                        map.clearOverlays();    //清除地图上所有覆盖物
+                        var marker = new BMap.Marker(endPoint); // 创建标注
+                        map.addOverlay(marker); // 将标注添加到地图中
+                        if (startPoint) {
+                            drawRoute(startPoint, endPoint);
+                        }
+                    }
+                }
+            });
+            local.search(myValue);
+        });
+
+        // 绘制驾车路线
+        function drawRoute(startPoint, endPoint) {
+            var driving = new BMap.DrivingRoute(map, {
+                renderOptions:{map: map, autoViewport: true},
+                onSearchComplete: function(results) {
+                    if (results.getNumPlans() > 0) {
+                        var plan = results.getPlan(0);
+                        var output = "从起点到终点驾车需要：" + plan.getDuration(true) + "分钟<br>";
+                        output += "总路程为：" + plan.getDistance(true) + "公里";
+                        document.getElementById('result').innerHTML = output;
+                    }
+                }
+            });
+            driving.search(startPoint, endPoint);
+        }
+
+        // 经纬度解析功能
+        function getLocation() {
+            var longitude = document.getElementById("longitude").value;
+            var latitude = document.getElementById("latitude").value;
+            
+            var geoc = new BMap.Geocoder();
+            var point = new BMap.Point(longitude, latitude);
+            
+            geoc.getLocation(point, function (rs) {
+                var addComp = rs.addressComponents;
+                var location = addComp.province + addComp.city + addComp.district + addComp.street + addComp.streetNumber;
+                document.getElementById("location").innerText = location;
+            });
+        }
+    </script>
+</body>
+</html>
