@@ -1,0 +1,138 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>GPS Client</title>
+    <style>
+        body,
+        html,
+        #container {
+            overflow: hidden;
+            width: 100%;
+            height: 100%;
+            margin: 0;
+            font-family: "微软雅黑", serif;
+        }
+        .info {
+            z-index: 999;
+            width: auto;
+            min-width: 22rem;
+            padding: .75rem 1.25rem;
+            margin-left: 1.25rem;
+            position: fixed;
+            top: 1rem;
+            background-color: #fff;
+            border-radius: .25rem;
+            font-size: 14px;
+            color: #666;
+            box-shadow: 0 2px 6px 0 rgba(27, 142, 236, 0.5);
+        }
+    </style>
+</head>
+<body>
+<div class="info">GPS Client</div>
+<div id="container"></div>
+
+<script src="mqtt.min.js"></script>
+<script src="https://api.map.baidu.com/api?type=webgl&v=1.0&ak=TkPLIFjUPMBEcXTYAVBS27eUVPzhBWXw"></script>
+<script>
+    // 创建地图实例
+    let map = new BMapGL.Map('container');
+    map.centerAndZoom('阿拉尔', 12); // 初始化地图,设置中心点坐标和地图级别
+    map.enableScrollWheelZoom(true); // 开启鼠标滚轮缩放
+
+    // MQTT连接
+    const url = 'ws://broker.emqx.io:8083/mqtt';
+    const options = {
+        clean: true,
+        connectTimeout: 4000,
+        clientId: 'emqx_test',
+        username: 'emqx_test',
+        password: 'emqx_test'
+    };
+    const client = mqtt.connect(url, options);
+    
+    // 存储标记点信息的数组
+    let markers = [];
+    // 存储轨迹线对象
+    let polyline;
+
+    client.on('connect', function () {
+        console.log('Connected');
+        client.subscribe('ec800k/alarm', function (err) {
+            if (!err) {
+                console.log('Subscribed to ec800k/alarm');
+            }
+        });
+    });
+
+    client.on('message', function (topic, message) {
+        console.log('Received message:', message.toString());
+        const jsonString = message.toString();
+        const parsedObject = JSON.parse(jsonString);
+        console.log('Parsed object:', parsedObject);
+        
+        // 检查是否已存在相同的标记点，避免重复添加
+        if (!isMarkerExists(parsedObject)) {
+            // 添加标记点到数组
+            markers.push({lat: parsedObject.long / 100.0, long: parsedObject.lat / 100.0, time: new Date()});
+            
+            // 添加标记点到地图
+            addMarker(markers[markers.length - 1]);
+        }
+    });
+
+    function isMarkerExists(newMarker) {
+        for (let i = 0; i < markers.length; i++) {
+            let marker = markers[i];
+            if (marker.lat === newMarker.long / 100.0 && marker.long === newMarker.lat / 100.0) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    function addMarker(marker) {
+        console.log('Adding marker:', marker);
+        // 创建点标记
+        let point = new BMapGL.Point(marker.long, marker.lat);
+        let markerObj = new BMapGL.Marker(point);
+
+        // 在地图上添加点标记
+        map.addOverlay(markerObj);
+
+        // 点击标记时显示信息窗口
+        markerObj.addEventListener("click", function () {
+            let infoWindow = new BMapGL.InfoWindow("经度：" + marker.long + "<br>纬度：" + marker.lat + "<br>时间：" + marker.time.toLocaleString(), {
+                width: 250, // 信息窗口宽度
+                height: 100, // 信息窗口高度
+                title: "定位信息" // 信息窗口标题
+            });
+            map.openInfoWindow(infoWindow, point);
+        });
+        
+        // 更新轨迹
+        updatePolyline();
+    }
+    
+    function updatePolyline() {
+        // 如果只有一个标记点，则无需绘制轨迹线
+        if (markers.length <= 1) {
+            return;
+        }
+
+        // 清除之前的轨迹线
+        if (polyline) {
+            map.removeOverlay(polyline);
+        }
+
+        // 构造轨迹线的点数组
+        let points = markers.map(marker => new BMapGL.Point(marker.long, marker.lat));
+
+        // 绘制轨迹线
+        polyline = new BMapGL.Polyline(points, {strokeColor: "blue", strokeWeight: 3, strokeOpacity: 0.5});
+        map.addOverlay(polyline);
+    }
+</script>
+</body>
+</html>
